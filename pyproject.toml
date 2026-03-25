@@ -1,0 +1,12 @@
+[project]
+name = "falsegrip"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.7",
+    "streamlit>=1.55.0",
+]
