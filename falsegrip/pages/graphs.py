@@ -18,53 +18,78 @@ def render(repository: FalseGripRepository) -> None:
 
     graph_type = st.selectbox(
         "Graph type",
-        options=("Workout Frequency", "Volume Progression", "Exercise Distribution"),
+        options=("Volume Progression", "Exercise Distribution"),
         index=0,
     )
 
-    if graph_type == "Workout Frequency":
-        period = st.selectbox("Period", options=("week", "month"), index=0)
-        dataframe = analytics_service.workout_frequency_dataframe(period=period)
-        if dataframe.empty:
-            st.info("No workout data available yet.")
-            return
-        figure = px.bar(dataframe, x="period", y="count", title="Workout Frequency")
-        st.plotly_chart(figure, width="stretch")
-    elif graph_type == "Volume Progression":
+    if graph_type == "Volume Progression":
         definitions = workout_service.list_exercise_definitions()
         if not definitions:
             st.info("No exercises available yet.")
             return
 
-        definitions_by_name = {
-            definition.name: definition for definition in definitions
-        }
-        selected_name = st.selectbox(
-            "Exercise", options=list(definitions_by_name.keys())
+        available_types = sorted(
+            {definition.exercise_type for definition in definitions},
+            key=lambda exercise_type: exercise_type.value,
         )
-        selected_definition = definitions_by_name[selected_name]
-        dataframe = analytics_service.volume_progression_dataframe(
-            exercise_definition_id=selected_definition.id,
+        selected_type = st.selectbox(
+            "Exercise type",
+            options=available_types,
+            format_func=lambda exercise_type: exercise_type.value,
+        )
+
+        filtered_definitions = [
+            definition
+            for definition in definitions
+            if definition.exercise_type == selected_type
+        ]
+        if not filtered_definitions:
+            st.info("No exercises available for this type yet.")
+            return
+
+        default_names = [definition.name for definition in filtered_definitions]
+        selected_names = st.multiselect(
+            "Exercises",
+            options=default_names,
+            default=default_names,
+        )
+        if not selected_names:
+            st.info("Select at least one exercise.")
+            return
+
+        selected_definitions = [
+            definition
+            for definition in filtered_definitions
+            if definition.name in selected_names
+        ]
+        selections = [
+            (definition.id, definition.name) for definition in selected_definitions
+        ]
+        dataframe = analytics_service.multi_volume_progression_dataframe(
+            selections=selections
         )
         if dataframe.empty:
-            st.info("No volume data available for this exercise yet.")
+            st.info("No volume data available for the selected exercises yet.")
             return
 
         y_label = "Progress"
-        if selected_definition.exercise_type == ExerciseType.WEIGHT_REPS:
+        if selected_type == ExerciseType.WEIGHT_REPS:
             y_label = "kg"
-        elif selected_definition.exercise_type == ExerciseType.BODYWEIGHT_REPS:
+        elif selected_type == ExerciseType.BODYWEIGHT_REPS:
             y_label = "total reps"
         else:
             y_label = "seconds"
 
-        figure = px.bar(
+        figure = px.line(
             dataframe,
             x="date",
             y="volume",
+            color="exercise",
+            markers=True,
             title=f"Volume Progression ({y_label})",
-            labels={"volume": y_label, "date": "Date"},
+            labels={"volume": y_label, "date": "Date", "exercise": "Exercise"},
         )
+        figure.update_traces(mode="lines+markers")
         st.plotly_chart(figure, width="stretch")
     else:
         category_dataframe = analytics_service.exercise_distribution_dataframe()

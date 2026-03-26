@@ -128,11 +128,34 @@ class WorkoutService:
 
     def save_workout_as_plan(self, workout: Workout) -> str:
         """Convert a workout instance into a workout plan."""
+        plan_entries: list[WorkoutExerciseEntry] = []
+        for entry in workout.exercises:
+            plan_sets = [
+                WorkoutSet(
+                    id="",
+                    order_index=workout_set.order_index,
+                    weight_kg=None,
+                    reps=None,
+                    duration_seconds=None,
+                )
+                for workout_set in entry.sets
+            ]
+            plan_entries.append(
+                WorkoutExerciseEntry(
+                    id="",
+                    exercise_definition_id=entry.exercise_definition_id,
+                    exercise_name=entry.exercise_name,
+                    category=entry.category,
+                    exercise_type=entry.exercise_type,
+                    sets=plan_sets,
+                )
+            )
+
         plan = WorkoutPlan(
             id="",
             name=workout.name,
             notes=workout.notes,
-            exercises=workout.exercises,
+            exercises=plan_entries,
         )
         return self.save_workout_plan(plan)
 

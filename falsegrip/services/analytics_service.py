@@ -35,6 +35,32 @@ class AnalyticsService:
             ]
         )
 
+    def multi_volume_progression_dataframe(
+        self, selections: list[tuple[str, str]]
+    ) -> pd.DataFrame:
+        """Return combined volume progression for multiple exercises."""
+        rows: list[dict[str, object]] = []
+        for exercise_id, exercise_name in selections:
+            points = self._repository.get_volume_progression(
+                exercise_definition_id=exercise_id
+            )
+            rows.extend(
+                {
+                    "date": point.workout_date,
+                    "volume": point.total_volume,
+                    "exercise": exercise_name,
+                }
+                for point in points
+            )
+        dataframe = pd.DataFrame(rows)
+        if dataframe.empty:
+            return dataframe
+
+        dataframe["date"] = pd.to_datetime(dataframe["date"], errors="coerce")
+        dataframe["volume"] = pd.to_numeric(dataframe["volume"], errors="coerce")
+        dataframe = dataframe.dropna(subset=["date", "volume"])
+        return dataframe.sort_values(["exercise", "date"]).reset_index(drop=True)
+
     def exercise_distribution_dataframe(self) -> pd.DataFrame:
         """Return exercise category distribution as a DataFrame."""
         points = self._repository.get_exercise_distribution()

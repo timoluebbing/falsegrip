@@ -124,7 +124,11 @@ def _clear_exercise_state(prefix: str, exercise_index: int) -> None:
             del st.session_state[key]
 
 
-def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> None:
+def _initialize_workout_form_state(
+    prefix: str,
+    initial_workout: Workout,
+    service: WorkoutService,
+) -> None:
     """Initialize workout form widget state from a workout draft."""
     nonce = st.session_state.get("logbook_dialog_nonce", "")
     initialized_nonce_key = f"{prefix}_initialized_nonce"
@@ -158,6 +162,14 @@ def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> Non
             entry.exercise_definition_id
         )
 
+        previous_sets: list[WorkoutSet] = []
+        if entry.exercise_definition_id:
+            last_logged_entry = service.get_last_logged_exercise_entry(
+                entry.exercise_definition_id
+            )
+            if last_logged_entry is not None:
+                previous_sets = last_logged_entry.sets
+
         set_count = max(1, len(entry.sets))
         st.session_state[f"{exercise_base}_set_count"] = set_count
         for set_index in range(set_count):
@@ -181,9 +193,34 @@ def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> Non
                 if default_set and default_set.duration_seconds is not None
                 else ""
             )
-            st.session_state[f"{set_base}_placeholder_weight"] = ""
-            st.session_state[f"{set_base}_placeholder_reps"] = ""
-            st.session_state[f"{set_base}_placeholder_duration"] = ""
+
+            has_explicit_values = bool(
+                default_set
+                and (
+                    default_set.weight_kg is not None
+                    or default_set.reps is not None
+                    or default_set.duration_seconds is not None
+                )
+            )
+            if has_explicit_values or set_index >= len(previous_sets):
+                st.session_state[f"{set_base}_placeholder_weight"] = ""
+                st.session_state[f"{set_base}_placeholder_reps"] = ""
+                st.session_state[f"{set_base}_placeholder_duration"] = ""
+            else:
+                previous_set = previous_sets[set_index]
+                st.session_state[f"{set_base}_placeholder_weight"] = (
+                    str(previous_set.weight_kg)
+                    if previous_set.weight_kg is not None
+                    else ""
+                )
+                st.session_state[f"{set_base}_placeholder_reps"] = (
+                    str(previous_set.reps) if previous_set.reps is not None else ""
+                )
+                st.session_state[f"{set_base}_placeholder_duration"] = (
+                    str(previous_set.duration_seconds)
+                    if previous_set.duration_seconds is not None
+                    else ""
+                )
 
     st.session_state[initialized_nonce_key] = nonce
 
@@ -630,7 +667,11 @@ def _workout_dialog(
 ) -> None:
     """Render create/edit workout dialog."""
     form_prefix = "workout_form"
-    _initialize_workout_form_state(prefix=form_prefix, initial_workout=initial_workout)
+    _initialize_workout_form_state(
+        prefix=form_prefix,
+        initial_workout=initial_workout,
+        service=service,
+    )
 
     definitions = service.list_exercise_definitions()
 
@@ -883,14 +924,5 @@ def render(repository: FalseGripRepository) -> None:
         if st.button("Load More", width="stretch"):
             st.session_state["logbook_limit"] += PAGE_SIZE
             st.rerun()
-
-    csv_content = service.export_workouts_csv()
-    st.download_button(
-        "Export CSV",
-        data=csv_content,
-        file_name="falsegrip-workouts.csv",
-        mime="text/csv",
-        width="stretch",
-    )
 
     _open_dialog_if_requested(service=service)

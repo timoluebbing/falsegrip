@@ -35,23 +35,20 @@ def render(repository: FalseGripRepository) -> None:
 
     for plan in plans:
         with st.container(border=True):
-            st.subheader(plan.name)
-            st.text(_plan_summary(plan))
+            header_left, header_right = st.columns([8, 1])
+            header_left.subheader(plan.name)
+            with header_right:
+                with st.popover("❌", use_container_width=True):
+                    st.warning("Delete this workout plan?")
+                    if st.button(
+                        "Delete Workout Plan",
+                        key=f"delete_plan_confirm_{plan.id}",
+                        width="stretch",
+                    ):
+                        service.delete_workout_plan(plan.id)
+                        st.rerun()
 
-            with st.expander("Show details"):
-                for entry in plan.exercises:
-                    st.write(f"{entry.exercise_name}")
-                    for set_index, workout_set in enumerate(entry.sets, start=1):
-                        if workout_set.weight_kg is not None:
-                            st.caption(
-                                f"Set {set_index}: {workout_set.weight_kg} kg × {workout_set.reps or 0}",
-                            )
-                        elif workout_set.reps is not None:
-                            st.caption(f"Set {set_index}: {workout_set.reps} reps")
-                        else:
-                            st.caption(
-                                f"Set {set_index}: {workout_set.duration_seconds or 0} seconds",
-                            )
+            st.text(_plan_summary(plan))
 
             if st.button("Start Workout", key=f"start_{plan.id}", width="stretch"):
                 workout = service.start_workout_from_plan(plan)
@@ -61,12 +58,4 @@ def render(repository: FalseGripRepository) -> None:
                 st.info(
                     "Workout form opened with plan data. Save it from the Logbook tab."
                 )
-                st.rerun()
-
-            if st.button(
-                "Delete Workout Plan",
-                key=f"delete_plan_{plan.id}",
-                width="stretch",
-            ):
-                service.delete_workout_plan(plan.id)
                 st.rerun()
