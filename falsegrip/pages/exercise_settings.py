@@ -7,6 +7,7 @@ import streamlit as st
 from falsegrip.models.enums import ExerciseCategory, ExerciseType
 from falsegrip.repositories.base import FalseGripRepository
 from falsegrip.services.workout_service import WorkoutService
+from falsegrip.components.dialogs import confirm_deletion
 
 
 def render(repository: FalseGripRepository) -> None:
@@ -57,8 +58,15 @@ def render(repository: FalseGripRepository) -> None:
                     type="secondary",
                     width="stretch",
                 ):
-                    try:
-                        service.delete_exercise_definition(definition.id)
-                        st.rerun()
-                    except ValueError as error:
-                        st.error(str(error))
+
+                    def do_delete(d_id=definition.id):
+                        try:
+                            service.delete_exercise_definition(d_id)
+                            st.rerun()
+                        except ValueError as error:
+                            st.error(str(error))
+
+                    confirm_deletion(
+                        "Are you sure you want to delete this exercise? It will affect historical analytics.",
+                        do_delete,
+                    )

@@ -9,3 +9,4 @@ class EditorMode(str, Enum):
     CREATE = "create"
     EDIT = "edit"
     FROM_PLAN = "create_from_plan"
+    PLAN_EDIT = "plan_edit"

@@ -37,6 +37,9 @@ def validate_exercise_entry(entry: WorkoutExerciseEntry) -> None:
 
 def validate_workout(workout: Workout) -> None:
     """Validate workout-level required fields and nested entries."""
+    if workout.is_draft:
+        return
+
     if not workout.name.strip():
         raise ValidationError("Workout name is required.")
 

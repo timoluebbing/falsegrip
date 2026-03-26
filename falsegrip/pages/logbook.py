@@ -87,6 +87,29 @@ def _open_dialog_if_requested(service: WorkoutService) -> None:
                     workout_template, service
                 )
 
+        elif mode == EditorMode.PLAN_EDIT:
+            plan_id = st.session_state.get("workout_plan_edit_id", "")
+            if plan_id:
+                plan = service.get_workout_plan(plan_id)
+                if plan is not None:
+                    dummy_workout = Workout(
+                        id=plan.id,
+                        name=plan.name,
+                        workout_date=date.today(),
+                        notes=plan.notes,
+                        exercises=plan.exercises,
+                    )
+                    st.session_state["current_workout_draft"] = workout_to_draft(
+                        dummy_workout, service
+                    )
+            else:
+                dummy_workout = Workout(
+                    id="", name="", workout_date=date.today(), notes="", exercises=[]
+                )
+                st.session_state["current_workout_draft"] = workout_to_draft(
+                    dummy_workout, service
+                )
+
     if "current_workout_draft" in st.session_state:
         _workout_dialog(service=service, mode=mode)
 
@@ -100,6 +123,8 @@ def render(repository: FalseGripRepository) -> None:
     if st.button("+ Add Workout", key="logbook_add_above", width="stretch"):
         st.session_state["logbook_dialog_mode"] = EditorMode.CREATE.value
         st.session_state["logbook_edit_id"] = ""
+        if "current_workout_draft" in st.session_state:
+            del st.session_state["current_workout_draft"]
         st.rerun()
 
     for workout in workouts:

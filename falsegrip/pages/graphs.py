@@ -72,22 +72,47 @@ def render(repository: FalseGripRepository) -> None:
             st.info("No volume data available for the selected exercises yet.")
             return
 
-        y_label = "Progress"
+        metric_options = ["Total Volume"]
         if selected_type == ExerciseType.WEIGHT_REPS:
-            y_label = "kg"
+            metric_options.append("Max Weight")
         elif selected_type == ExerciseType.BODYWEIGHT_REPS:
-            y_label = "total reps"
-        else:
-            y_label = "seconds"
+            metric_options.extend(["Max Reps", "Average Reps"])
+
+        metric = st.radio("Metric", metric_options, horizontal=True)
+
+        y_col = "volume"
+        y_label = "Progress"
+        if metric == "Total Volume":
+            y_col = "volume"
+            if selected_type == ExerciseType.WEIGHT_REPS:
+                y_label = "Total Volume (kg × reps)"
+            elif selected_type == ExerciseType.BODYWEIGHT_REPS:
+                y_label = "Total Reps"
+            else:
+                y_label = "Total Seconds"
+        elif metric == "Max Weight":
+            y_col = "max_weight"
+            y_label = "Max Weight (kg)"
+        elif metric == "Max Reps":
+            y_col = "max_reps"
+            y_label = "Max Reps"
+        elif metric == "Average Reps":
+            y_col = "mean_reps"
+            y_label = "Average Reps"
+
+        plot_df = dataframe.dropna(subset=[y_col])
+        if plot_df.empty:
+            st.info(f"No {metric} data available for the selected exercises yet.")
+            return
 
         figure = px.line(
-            dataframe,
+            plot_df,
             x="date",
-            y="volume",
+            y=y_col,
             color="exercise",
             markers=True,
-            title=f"Volume Progression ({y_label})",
-            labels={"volume": y_label, "date": "Date", "exercise": "Exercise"},
+            title=f"{metric} Progression",
+            labels={y_col: y_label, "date": "Date", "exercise": "Exercise"},
         )
         figure.update_traces(mode="lines+markers")
         st.plotly_chart(figure, width="stretch")

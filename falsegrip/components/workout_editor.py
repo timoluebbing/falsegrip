@@ -9,7 +9,12 @@ import streamlit as st
 
 from falsegrip.models import ValidationError
 from falsegrip.models.enums import ExerciseType
-from falsegrip.models.workout import Workout, WorkoutExerciseEntry, WorkoutSet
+from falsegrip.models.workout import (
+    Workout,
+    WorkoutExerciseEntry,
+    WorkoutSet,
+    WorkoutPlan,
+)
 from falsegrip.models.drafts import WorkoutDraft, ExerciseDraft, SetDraft
 from falsegrip.models.ui_enums import EditorMode
 from falsegrip.services.workout_service import WorkoutService
@@ -133,7 +138,9 @@ def workout_to_draft(workout: Workout, service: WorkoutService) -> WorkoutDraft:
     return draft
 
 
-def draft_to_workout(draft: WorkoutDraft, service: WorkoutService) -> Workout:
+def draft_to_workout(
+    draft: WorkoutDraft, service: WorkoutService, is_draft: bool = False
+) -> Workout:
     entries: list[WorkoutExerciseEntry] = []
     for ex in draft.exercises:
         if not ex.configured or not ex.name.strip():
@@ -171,6 +178,7 @@ def draft_to_workout(draft: WorkoutDraft, service: WorkoutService) -> Workout:
         name=draft.name,
         workout_date=draft.workout_date,
         notes=draft.notes,
+        is_draft=is_draft,
         exercises=entries,
     )
 
@@ -186,9 +194,32 @@ def render_workout_editor(
 
     draft: WorkoutDraft = st.session_state["current_workout_draft"]
 
+    if mode == EditorMode.EDIT:
+        top_left, top_right = st.columns([7, 1])
+        with top_right:
+            with st.popover("⋮"):
+                if st.button("Delete Workout", width="stretch"):
+                    service.delete_workout(draft.id)
+                    st.session_state["logbook_autosave_last_hash"] = ""
+                    st.session_state["logbook_autosave_last_ts"] = 0.0
+                    on_close()
+                    st.rerun()
+
+                if st.button("Save as workout plan", width="stretch"):
+                    w_for_plan = draft_to_workout(draft, service, is_draft=False)
+                    service.save_workout_as_plan(w_for_plan)
+                    on_close()
+                    st.rerun()
+
     with st.container(horizontal=True):
-        bound_text_input("Workout Name", draft, "name", key="draft_name")
-        bound_date_input("Date", draft, "workout_date", key="draft_date")
+        bound_text_input(
+            "Workout Name" if mode != EditorMode.PLAN_EDIT else "Plan Name",
+            draft,
+            "name",
+            key="draft_name",
+        )
+        if mode != EditorMode.PLAN_EDIT:
+            bound_date_input("Date", draft, "workout_date", key="draft_date")
     bound_text_area("Notes", draft, "notes", key="draft_notes", height=32)
 
     indices_to_remove = []
@@ -208,44 +239,44 @@ def render_workout_editor(
             st.caption(f"{ex.category.value} • {ex.exercise_type.value}")
 
             for s_idx, s in enumerate(ex.sets):
-                row = st.columns([1, 3, 3])
-                row[0].markdown(f"**{s_idx + 1}**")
+                with st.container(horizontal=True):
+                    st.markdown(f"**{s_idx + 1}**")
 
-                if ex.exercise_type == ExerciseType.WEIGHT_REPS:
-                    bound_text_input(
-                        "kg",
-                        s,
-                        "weight_kg",
-                        key=f"w_{s.key_id}",
-                        label_visibility="collapsed",
-                        placeholder=s.placeholder_weight,
-                    )
-                    bound_text_input(
-                        "reps",
-                        s,
-                        "reps",
-                        key=f"r_{s.key_id}",
-                        label_visibility="collapsed",
-                        placeholder=s.placeholder_reps,
-                    )
-                elif ex.exercise_type == ExerciseType.BODYWEIGHT_REPS:
-                    bound_text_input(
-                        "reps",
-                        s,
-                        "reps",
-                        key=f"r_{s.key_id}",
-                        label_visibility="collapsed",
-                        placeholder=s.placeholder_reps,
-                    )
-                else:
-                    bound_text_input(
-                        "duration",
-                        s,
-                        "duration_seconds",
-                        key=f"d_{s.key_id}",
-                        label_visibility="collapsed",
-                        placeholder=s.placeholder_duration or "seconds",
-                    )
+                    if ex.exercise_type == ExerciseType.WEIGHT_REPS:
+                        bound_text_input(
+                            "kg",
+                            s,
+                            "weight_kg",
+                            key=f"w_{s.key_id}",
+                            label_visibility="collapsed",
+                            placeholder=s.placeholder_weight,
+                        )
+                        bound_text_input(
+                            "reps",
+                            s,
+                            "reps",
+                            key=f"r_{s.key_id}",
+                            label_visibility="collapsed",
+                            placeholder=s.placeholder_reps,
+                        )
+                    elif ex.exercise_type == ExerciseType.BODYWEIGHT_REPS:
+                        bound_text_input(
+                            "reps",
+                            s,
+                            "reps",
+                            key=f"r_{s.key_id}",
+                            label_visibility="collapsed",
+                            placeholder=s.placeholder_reps,
+                        )
+                    else:
+                        bound_text_input(
+                            "duration",
+                            s,
+                            "duration_seconds",
+                            key=f"d_{s.key_id}",
+                            label_visibility="collapsed",
+                            placeholder=s.placeholder_duration or "seconds",
+                        )
 
             if st.button("Add Set", key=f"add_{ex.key_id}", width="stretch"):
                 ex.sets.append(SetDraft())
@@ -303,24 +334,10 @@ def render_workout_editor(
                     draft.exercises.append(new_ex)
                     st.rerun()
 
-    if mode == EditorMode.EDIT:
-        top_left, top_right = st.columns([7, 1])
-        with top_right:
-            with st.popover("⋮"):
-                if st.button("Delete Workout", width="stretch"):
-                    service.delete_workout(draft.id)
-                    st.session_state["logbook_autosave_last_hash"] = ""
-                    st.session_state["logbook_autosave_last_ts"] = 0.0
-                    on_close()
-                    st.rerun()
-
-                if st.button("Save as workout plan", width="stretch"):
-                    w_for_plan = draft_to_workout(draft, service)
-                    service.save_workout_as_plan(w_for_plan)
-                    on_close()
-                    st.rerun()
-
     def try_autosave():
+        if mode == EditorMode.PLAN_EDIT:
+            return
+
         if draft.is_empty():
             return
 
@@ -335,7 +352,8 @@ def render_workout_editor(
         if now_ts - last_ts < 1.5:
             return
 
-        temp_workout = draft_to_workout(draft, service)
+        is_draft_save = mode != EditorMode.EDIT
+        temp_workout = draft_to_workout(draft, service, is_draft=is_draft_save)
         if draft.autosaved_id and not temp_workout.id:
             temp_workout.id = draft.autosaved_id
 
@@ -359,13 +377,26 @@ def render_workout_editor(
         st.caption(autosave_status)
 
     save_label = "Save Workout" if mode != EditorMode.EDIT else "Finish Workout"
+    if mode == EditorMode.PLAN_EDIT:
+        save_label = "Save Plan"
+
     if st.button(save_label, width="stretch"):
-        final_workout = draft_to_workout(draft, service)
-        if draft.autosaved_id and not final_workout.id:
-            final_workout.id = draft.autosaved_id
+        final_workout = draft_to_workout(draft, service, is_draft=False)
 
         try:
-            service.save_workout(final_workout)
+            if mode == EditorMode.PLAN_EDIT:
+                plan = WorkoutPlan(
+                    id=draft.id,
+                    name=final_workout.name,
+                    notes=final_workout.notes,
+                    exercises=final_workout.exercises,
+                )
+                service.save_workout_plan(plan)
+            else:
+                if draft.autosaved_id and not final_workout.id:
+                    final_workout.id = draft.autosaved_id
+                service.save_workout(final_workout)
+
             st.session_state["logbook_autosave_last_hash"] = ""
             st.session_state["logbook_autosave_last_ts"] = 0.0
             st.session_state["logbook_autosave_status"] = ""

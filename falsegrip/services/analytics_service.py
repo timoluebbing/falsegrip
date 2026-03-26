@@ -48,6 +48,9 @@ class AnalyticsService:
                 {
                     "date": point.workout_date,
                     "volume": point.total_volume,
+                    "max_weight": point.max_weight,
+                    "max_reps": point.max_reps,
+                    "mean_reps": point.mean_reps,
                     "exercise": exercise_name,
                 }
                 for point in points
@@ -58,7 +61,14 @@ class AnalyticsService:
 
         dataframe["date"] = pd.to_datetime(dataframe["date"], errors="coerce")
         dataframe["volume"] = pd.to_numeric(dataframe["volume"], errors="coerce")
-        dataframe = dataframe.dropna(subset=["date", "volume"])
+        dataframe["max_weight"] = pd.to_numeric(
+            dataframe["max_weight"], errors="coerce"
+        )
+        dataframe["max_reps"] = pd.to_numeric(dataframe["max_reps"], errors="coerce")
+        dataframe["mean_reps"] = pd.to_numeric(dataframe["mean_reps"], errors="coerce")
+        # Ensure we only drop if the key field we are visualizing is NaN.
+        # But we visualize volume by default, let's just drop on date and keep NaN for others if they don't apply.
+        dataframe = dataframe.dropna(subset=["date"])
         return dataframe.sort_values(["exercise", "date"]).reset_index(drop=True)
 
     def exercise_distribution_dataframe(self) -> pd.DataFrame:

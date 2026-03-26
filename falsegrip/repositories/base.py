@@ -30,6 +30,9 @@ class VolumePoint:
 
     workout_date: str
     total_volume: float
+    max_weight: float | None = None
+    max_reps: int | None = None
+    mean_reps: float | None = None
 
 
 @dataclass(frozen=True)

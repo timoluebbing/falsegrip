@@ -50,6 +50,7 @@ class Workout:
     name: str
     workout_date: date
     notes: str
+    is_draft: bool = False
     exercises: list[WorkoutExerciseEntry] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

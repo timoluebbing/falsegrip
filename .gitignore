@@ -1,4 +1,7 @@
 .github
+.vscode
+.idea
+.streamlit
 .streamlit/.secrets.toml
 
 falsegrip.db

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS workouts (
     name TEXT NOT NULL,
     workout_date TEXT NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
+    is_draft BOOLEAN DEFAULT FALSE,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

@@ -40,10 +40,11 @@ class SQLiteRepository(FalseGripRepository):
             self._seed_exercises(connection)
 
     def list_workouts(self, limit: int, offset: int) -> list[Workout]:
-        """Return workouts sorted by date descending."""
+        """Return workouts sorted by date descending, excluding drafts."""
         query = """
-            SELECT id, name, workout_date, notes, created_at, updated_at
+            SELECT id, name, workout_date, notes, is_draft, created_at, updated_at
             FROM workouts
+            WHERE is_draft = 0
             ORDER BY workout_date DESC, created_at DESC
             LIMIT ? OFFSET ?
         """
@@ -65,18 +66,20 @@ class SQLiteRepository(FalseGripRepository):
         """Persist a workout with nested exercises and sets."""
         workout_id = workout.id or str(uuid4())
         now = datetime.now(UTC).isoformat()
+        is_draft = 1 if workout.is_draft else 0
 
         with connect(self._sqlite_path) as connection:
             connection.execute(
                 """
-                INSERT INTO workouts (id, name, workout_date, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO workouts (id, name, workout_date, notes, is_draft, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     workout_id,
                     workout.name,
                     workout.workout_date.isoformat(),
                     workout.notes,
+                    is_draft,
                     now,
                     now,
                 ),
@@ -89,18 +92,20 @@ class SQLiteRepository(FalseGripRepository):
     def update_workout(self, workout: Workout) -> None:
         """Update workout and replace nested entries."""
         now = datetime.now(UTC).isoformat()
+        is_draft = 1 if workout.is_draft else 0
 
         with connect(self._sqlite_path) as connection:
             connection.execute(
                 """
                 UPDATE workouts
-                SET name = ?, workout_date = ?, notes = ?, updated_at = ?
+                SET name = ?, workout_date = ?, notes = ?, is_draft = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     workout.name,
                     workout.workout_date.isoformat(),
                     workout.notes,
+                    is_draft,
                     now,
                     workout.id,
                 ),
@@ -326,11 +331,14 @@ class SQLiteRepository(FalseGripRepository):
                            WHEN we.exercise_type = 'Bodyweight, Reps' THEN COALESCE(ws.reps, 0)
                            ELSE COALESCE(ws.duration_seconds, 0)
                        END
-                   ) AS total_volume
+                   ) AS total_volume,
+                   MAX(ws.weight_kg) as max_weight,
+                   MAX(ws.reps) as max_reps,
+                   AVG(ws.reps) as mean_reps
             FROM workouts w
             INNER JOIN workout_exercises we ON we.workout_id = w.id
             INNER JOIN workout_sets ws ON ws.workout_exercise_id = we.id
-            WHERE we.exercise_definition_id = ?
+            WHERE we.exercise_definition_id = ? AND w.is_draft = 0
             GROUP BY w.workout_date
             ORDER BY w.workout_date ASC
         """
@@ -341,6 +349,13 @@ class SQLiteRepository(FalseGripRepository):
             VolumePoint(
                 workout_date=row["workout_date"],
                 total_volume=float(row["total_volume"] or 0.0),
+                max_weight=float(row["max_weight"])
+                if row["max_weight"] is not None
+                else None,
+                max_reps=int(row["max_reps"]) if row["max_reps"] is not None else None,
+                mean_reps=float(row["mean_reps"])
+                if row["mean_reps"] is not None
+                else None,
             )
             for row in rows
         ]
@@ -405,7 +420,7 @@ class SQLiteRepository(FalseGripRepository):
         """Load one workout with nested entries and sets."""
         workout_row = connection.execute(
             """
-            SELECT id, name, workout_date, notes, created_at, updated_at
+            SELECT id, name, workout_date, notes, is_draft, created_at, updated_at
             FROM workouts
             WHERE id = ?
             """,
@@ -414,12 +429,17 @@ class SQLiteRepository(FalseGripRepository):
         if workout_row is None:
             raise ValueError(f"Workout not found: {workout_id}")
 
+        is_draft = False
+        if "is_draft" in workout_row.keys():
+            is_draft = bool(workout_row["is_draft"])
+
         entries = self._load_workout_entries(connection, workout_id)
         return Workout(
             id=workout_row["id"],
             name=workout_row["name"],
             workout_date=date.fromisoformat(workout_row["workout_date"]),
             notes=workout_row["notes"],
+            is_draft=is_draft,
             exercises=entries,
             created_at=datetime.fromisoformat(workout_row["created_at"]),
             updated_at=datetime.fromisoformat(workout_row["updated_at"]),
