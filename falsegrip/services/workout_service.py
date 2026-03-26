@@ -52,6 +52,23 @@ class WorkoutService:
         """Return all known exercise definitions."""
         return self._repository.list_exercise_definitions()
 
+    def create_exercise_definition(
+        self,
+        name: str,
+        category: ExerciseCategory,
+        exercise_type: ExerciseType,
+    ) -> ExerciseDefinition:
+        """Create one exercise definition when missing and return it."""
+        return self.ensure_exercise_definition(
+            name=name,
+            category=category,
+            exercise_type=exercise_type,
+        )
+
+    def delete_exercise_definition(self, exercise_id: str) -> None:
+        """Delete one exercise definition by id."""
+        self._repository.delete_exercise_definition(exercise_id)
+
     def ensure_exercise_definition(
         self,
         name: str,

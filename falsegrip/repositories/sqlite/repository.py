@@ -228,6 +228,22 @@ class SQLiteRepository(FalseGripRepository):
             connection.commit()
         return exercise_id
 
+    def delete_exercise_definition(self, exercise_id: str) -> None:
+        """Delete one exercise definition by id."""
+        try:
+            with connect(self._sqlite_path) as connection:
+                cursor = connection.execute(
+                    "DELETE FROM exercise_definitions WHERE id = ?",
+                    (exercise_id,),
+                )
+                if cursor.rowcount == 0:
+                    raise ValueError("Exercise definition does not exist.")
+                connection.commit()
+        except sqlite3.IntegrityError as error:
+            raise ValueError(
+                "Exercise is used in existing workouts or plans and cannot be deleted."
+            ) from error
+
     def get_workout_frequency(self, period: Period) -> list[WorkoutFrequencyPoint]:
         """Return grouped workout count by period."""
         if period == "month":

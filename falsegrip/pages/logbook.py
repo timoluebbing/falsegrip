@@ -14,7 +14,6 @@ from falsegrip.repositories.base import FalseGripRepository
 from falsegrip.services.workout_service import WorkoutService
 
 PAGE_SIZE = 10
-EXERCISE_CREATE_OPTION = "➕ Create new exercise"
 
 
 def _initialize_page_state() -> None:
@@ -48,7 +47,6 @@ def _ensure_exercise_state(prefix: str, exercise_index: int) -> None:
     st.session_state.setdefault(
         f"{exercise_base}_saved_type", ExerciseType.WEIGHT_REPS.value
     )
-    st.session_state.setdefault(f"{exercise_base}_selected", EXERCISE_CREATE_OPTION)
     st.session_state.setdefault(f"{exercise_base}_set_count", 1)
     st.session_state.setdefault(f"{exercise_base}_saved_name", "")
 
@@ -70,7 +68,6 @@ def _set_exercise_defaults(prefix: str, exercise_index: int) -> None:
     st.session_state[f"{exercise_base}_type"] = ExerciseType.WEIGHT_REPS.value
     st.session_state[f"{exercise_base}_saved_category"] = ExerciseCategory.OTHER.value
     st.session_state[f"{exercise_base}_saved_type"] = ExerciseType.WEIGHT_REPS.value
-    st.session_state[f"{exercise_base}_selected"] = EXERCISE_CREATE_OPTION
     st.session_state[f"{exercise_base}_set_count"] = 1
     st.session_state[f"{exercise_base}_saved_name"] = ""
     st.session_state[f"{exercise_base}_set_0_weight"] = ""
@@ -91,7 +88,6 @@ def _clear_exercise_state(prefix: str, exercise_index: int) -> None:
         f"{exercise_base}_type",
         f"{exercise_base}_saved_category",
         f"{exercise_base}_saved_type",
-        f"{exercise_base}_selected",
         f"{exercise_base}_set_count",
     ]
 
@@ -140,7 +136,6 @@ def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> Non
         st.session_state[f"{exercise_base}_type"] = entry.exercise_type.value
         st.session_state[f"{exercise_base}_saved_category"] = entry.category.value
         st.session_state[f"{exercise_base}_saved_type"] = entry.exercise_type.value
-        st.session_state[f"{exercise_base}_selected"] = entry.exercise_name
 
         set_count = max(1, len(entry.sets))
         st.session_state[f"{exercise_base}_set_count"] = set_count
@@ -169,12 +164,26 @@ def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> Non
     st.session_state[initialized_nonce_key] = nonce
 
 
-def _add_exercise(prefix: str) -> None:
-    """Add a new exercise section to the active form."""
+def _add_exercise_from_definition(
+    prefix: str,
+    exercise_name: str,
+    category: ExerciseCategory,
+    exercise_type: ExerciseType,
+) -> None:
+    """Add a new configured exercise section from one definition."""
     count_key = f"{prefix}_exercise_count"
     exercise_index = int(st.session_state[count_key])
     st.session_state[count_key] = exercise_index + 1
     _set_exercise_defaults(prefix=prefix, exercise_index=exercise_index)
+
+    exercise_base = f"{prefix}_exercise_{exercise_index}"
+    st.session_state[f"{exercise_base}_configured"] = True
+    st.session_state[f"{exercise_base}_name"] = exercise_name
+    st.session_state[f"{exercise_base}_saved_name"] = exercise_name
+    st.session_state[f"{exercise_base}_category"] = category.value
+    st.session_state[f"{exercise_base}_saved_category"] = category.value
+    st.session_state[f"{exercise_base}_type"] = exercise_type.value
+    st.session_state[f"{exercise_base}_saved_type"] = exercise_type.value
 
 
 def _add_set(prefix: str, exercise_index: int) -> None:
@@ -217,9 +226,6 @@ def _remove_exercise(prefix: str, exercise_index: int) -> None:
         )
         st.session_state[f"{target_base}_saved_type"] = st.session_state.get(
             f"{source_base}_saved_type", ExerciseType.WEIGHT_REPS.value
-        )
-        st.session_state[f"{target_base}_selected"] = st.session_state.get(
-            f"{source_base}_selected", EXERCISE_CREATE_OPTION
         )
         st.session_state[f"{target_base}_set_count"] = st.session_state.get(
             f"{source_base}_set_count", 1
@@ -316,12 +322,6 @@ def _build_workout_from_form(
         if not selected_name:
             selected_name = str(st.session_state.get(f"{base}_name", "")).strip()
         if not selected_name:
-            selected_option = str(st.session_state.get(f"{base}_selected", "")).strip()
-            if selected_option and selected_option != EXERCISE_CREATE_OPTION:
-                selected_name = selected_option
-                st.session_state[f"{base}_name"] = selected_option
-                st.session_state[f"{base}_saved_name"] = selected_option
-        if not selected_name:
             continue
 
         category_value = str(
@@ -403,75 +403,6 @@ def _build_workout_from_form(
     )
 
 
-def _render_exercise_selector(
-    definitions_by_name: dict[str, tuple[ExerciseCategory, ExerciseType]],
-    exercise_base: str,
-    dialog_mode_for_rerun: str,
-    dialog_workout_id: str,
-) -> None:
-    """Render selector flow for selecting an existing or creating a new exercise."""
-    options = sorted(definitions_by_name.keys()) + [EXERCISE_CREATE_OPTION]
-    current_selected = st.session_state.get(
-        f"{exercise_base}_selected", EXERCISE_CREATE_OPTION
-    )
-    if current_selected not in options:
-        current_selected = EXERCISE_CREATE_OPTION
-    st.session_state[f"{exercise_base}_selected"] = current_selected
-
-    selected_option = st.selectbox(
-        "Choose exercise",
-        options=options,
-        key=f"{exercise_base}_selected",
-    )
-
-    if selected_option == EXERCISE_CREATE_OPTION:
-        st.text_input("Exercise name", key=f"{exercise_base}_name")
-        st.selectbox(
-            "Category",
-            options=[category.value for category in ExerciseCategory],
-            key=f"{exercise_base}_category",
-        )
-        st.selectbox(
-            "Exercise type",
-            options=[exercise_type.value for exercise_type in ExerciseType],
-            key=f"{exercise_base}_type",
-        )
-        if st.button(
-            "Add Exercise", key=f"{exercise_base}_confirm_new", width="stretch"
-        ):
-            if str(st.session_state[f"{exercise_base}_name"]).strip():
-                st.session_state[f"{exercise_base}_saved_category"] = str(
-                    st.session_state[f"{exercise_base}_category"]
-                )
-                st.session_state[f"{exercise_base}_saved_type"] = str(
-                    st.session_state[f"{exercise_base}_type"]
-                )
-                st.session_state[f"{exercise_base}_saved_name"] = str(
-                    st.session_state[f"{exercise_base}_name"]
-                ).strip()
-                st.session_state[f"{exercise_base}_configured"] = True
-                _rerun_keep_dialog(
-                    mode=dialog_mode_for_rerun,
-                    workout_id=dialog_workout_id,
-                )
-    else:
-        if st.button(
-            "Use Exercise", key=f"{exercise_base}_confirm_existing", width="stretch"
-        ):
-            category, exercise_type = definitions_by_name[selected_option]
-            st.session_state[f"{exercise_base}_name"] = selected_option
-            st.session_state[f"{exercise_base}_saved_name"] = selected_option
-            st.session_state[f"{exercise_base}_category"] = category.value
-            st.session_state[f"{exercise_base}_type"] = exercise_type.value
-            st.session_state[f"{exercise_base}_saved_category"] = category.value
-            st.session_state[f"{exercise_base}_saved_type"] = exercise_type.value
-            st.session_state[f"{exercise_base}_configured"] = True
-            _rerun_keep_dialog(
-                mode=dialog_mode_for_rerun,
-                workout_id=dialog_workout_id,
-            )
-
-
 def _render_set_inputs(
     prefix: str, exercise_index: int, exercise_type: ExerciseType
 ) -> None:
@@ -517,10 +448,6 @@ def _workout_dialog(
     _initialize_workout_form_state(prefix=form_prefix, initial_workout=initial_workout)
 
     definitions = service.list_exercise_definitions()
-    definitions_by_name = {
-        definition.name: (definition.category, definition.exercise_type)
-        for definition in definitions
-    }
 
     if mode == "edit" and existing_workout is not None:
         top_left, top_right = st.columns([7, 1])
@@ -569,12 +496,7 @@ def _workout_dialog(
 
             if not st.session_state.get(f"{exercise_base}_configured", False):
                 header_left.markdown("#### Exercise")
-                _render_exercise_selector(
-                    definitions_by_name=definitions_by_name,
-                    exercise_base=exercise_base,
-                    dialog_mode_for_rerun=dialog_mode_for_rerun,
-                    dialog_workout_id=dialog_workout_id,
-                )
+                st.info("Exercise entry is not configured. Remove it and add again.")
                 continue
 
             exercise_name = str(
@@ -585,13 +507,7 @@ def _workout_dialog(
                     st.session_state.get(f"{exercise_base}_name", "")
                 ).strip()
             if not exercise_name:
-                selected_option = str(
-                    st.session_state.get(f"{exercise_base}_selected", "")
-                ).strip()
-                if selected_option and selected_option != EXERCISE_CREATE_OPTION:
-                    exercise_name = selected_option
-                    st.session_state[f"{exercise_base}_name"] = selected_option
-                    st.session_state[f"{exercise_base}_saved_name"] = selected_option
+                exercise_name = "Exercise"
             header_left.markdown(f"#### {exercise_name}")
             category_label = str(
                 st.session_state.get(
@@ -624,9 +540,30 @@ def _workout_dialog(
                     mode=dialog_mode_for_rerun, workout_id=dialog_workout_id
                 )
 
-    if st.button("Add Exercise", key=f"{form_prefix}_add_exercise", width="stretch"):
-        _add_exercise(prefix=form_prefix)
-        _rerun_keep_dialog(mode=dialog_mode_for_rerun, workout_id=dialog_workout_id)
+    if not definitions:
+        st.info(
+            "No exercise definitions available. Add exercises in Exercise settings."
+        )
+    else:
+        with st.popover("Add Exercise"):
+            with st.container(height=260):
+                for definition in definitions:
+                    button_label = f"{definition.name} ({definition.category.value})"
+                    if st.button(
+                        button_label,
+                        key=f"{form_prefix}_add_definition_{definition.id}",
+                        width="stretch",
+                    ):
+                        _add_exercise_from_definition(
+                            prefix=form_prefix,
+                            exercise_name=definition.name,
+                            category=definition.category,
+                            exercise_type=definition.exercise_type,
+                        )
+                        _rerun_keep_dialog(
+                            mode=dialog_mode_for_rerun,
+                            workout_id=dialog_workout_id,
+                        )
 
     save_label = "Save Workout" if mode != "edit" else "Save Changes"
     if st.button(save_label, width="stretch"):

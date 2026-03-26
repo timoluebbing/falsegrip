@@ -91,6 +91,10 @@ class FalseGripRepository(ABC):
         """Persist and return the exercise definition id."""
 
     @abstractmethod
+    def delete_exercise_definition(self, exercise_id: str) -> None:
+        """Delete one exercise definition by id."""
+
+    @abstractmethod
     def get_workout_frequency(self, period: Period) -> list[WorkoutFrequencyPoint]:
         """Return frequency data grouped by week or month."""
 

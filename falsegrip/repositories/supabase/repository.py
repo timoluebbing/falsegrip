@@ -83,6 +83,11 @@ class SupabaseRepository(FalseGripRepository):
             "Supabase repository is planned for a following step."
         )
 
+    def delete_exercise_definition(self, exercise_id: str) -> None:
+        raise NotImplementedError(
+            "Supabase repository is planned for a following step."
+        )
+
     def get_workout_frequency(self, period: Period) -> list[WorkoutFrequencyPoint]:
         raise NotImplementedError(
             "Supabase repository is planned for a following step."

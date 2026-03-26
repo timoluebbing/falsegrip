@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from falsegrip.pages import graphs, logbook, settings, workout_plans
+from falsegrip.pages import exercise_settings, graphs, logbook, settings, workout_plans
 from falsegrip.repositories.factory import get_repository
 
 
@@ -26,7 +26,9 @@ def main() -> None:
         current = st.session_state.get("show_settings", False)
         st.session_state["show_settings"] = not current
 
-    logbook_tab, plans_tab, graphs_tab = st.tabs(["Logbook", "Workout Plans", "Graphs"])
+    logbook_tab, plans_tab, graphs_tab, exercises_tab = st.tabs(
+        ["Logbook", "Workout Plans", "Graphs", "Exercise Editor"]
+    )
 
     with logbook_tab:
         logbook.render(repository)
@@ -36,6 +38,9 @@ def main() -> None:
 
     with graphs_tab:
         graphs.render(repository)
+
+    with exercises_tab:
+        exercise_settings.render(repository)
 
     if st.session_state.get("show_settings", False):
         st.divider()

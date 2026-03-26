@@ -8,10 +8,11 @@ from enum import Enum
 class ExerciseCategory(str, Enum):
     """Supported exercise categories."""
 
-    UPPER_BODY = "Upper Body"
-    LOWER_BODY = "Lower Body"
+    CHEST = "Chest"
+    BACK = "Back"
+    SHOULDERS = "Shoulders"
+    LEGS = "Legs"
     CORE = "Core"
-    CARDIO = "Cardio"
     OTHER = "Other"
 
 
