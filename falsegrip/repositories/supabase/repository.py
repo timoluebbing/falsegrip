@@ -10,7 +10,12 @@ from falsegrip.repositories.base import (
     VolumePoint,
     WorkoutFrequencyPoint,
 )
-from falsegrip.models.workout import ExerciseDefinition, Workout, WorkoutPlan
+from falsegrip.models.workout import (
+    ExerciseDefinition,
+    Workout,
+    WorkoutExerciseEntry,
+    WorkoutPlan,
+)
 
 
 class SupabaseRepository(FalseGripRepository):
@@ -84,6 +89,13 @@ class SupabaseRepository(FalseGripRepository):
         )
 
     def delete_exercise_definition(self, exercise_id: str) -> None:
+        raise NotImplementedError(
+            "Supabase repository is planned for a following step."
+        )
+
+    def get_last_logged_exercise_entry(
+        self, exercise_definition_id: str
+    ) -> WorkoutExerciseEntry | None:
         raise NotImplementedError(
             "Supabase repository is planned for a following step."
         )

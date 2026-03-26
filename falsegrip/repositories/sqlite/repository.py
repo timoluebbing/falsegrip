@@ -244,6 +244,57 @@ class SQLiteRepository(FalseGripRepository):
                 "Exercise is used in existing workouts or plans and cannot be deleted."
             ) from error
 
+    def get_last_logged_exercise_entry(
+        self, exercise_definition_id: str
+    ) -> WorkoutExerciseEntry | None:
+        """Return the latest logged workout exercise entry for one definition."""
+        query = """
+            SELECT we.id,
+                   we.exercise_definition_id,
+                   we.exercise_name,
+                   we.category,
+                   we.exercise_type
+            FROM workout_exercises we
+            INNER JOIN workouts w ON w.id = we.workout_id
+            WHERE we.exercise_definition_id = ?
+            ORDER BY w.workout_date DESC, w.created_at DESC, we.order_index DESC
+            LIMIT 1
+        """
+        with connect(self._sqlite_path) as connection:
+            entry_row = connection.execute(query, (exercise_definition_id,)).fetchone()
+            if entry_row is None:
+                return None
+
+            set_rows = connection.execute(
+                """
+                SELECT id, order_index, weight_kg, reps, duration_seconds
+                FROM workout_sets
+                WHERE workout_exercise_id = ?
+                ORDER BY order_index ASC
+                """,
+                (entry_row["id"],),
+            ).fetchall()
+
+        sets = [
+            WorkoutSet(
+                id=set_row["id"],
+                order_index=set_row["order_index"],
+                weight_kg=set_row["weight_kg"],
+                reps=set_row["reps"],
+                duration_seconds=set_row["duration_seconds"],
+            )
+            for set_row in set_rows
+        ]
+
+        return WorkoutExerciseEntry(
+            id=entry_row["id"],
+            exercise_definition_id=entry_row["exercise_definition_id"],
+            exercise_name=entry_row["exercise_name"],
+            category=ExerciseCategory(entry_row["category"]),
+            exercise_type=ExerciseType(entry_row["exercise_type"]),
+            sets=sets,
+        )
+
     def get_workout_frequency(self, period: Period) -> list[WorkoutFrequencyPoint]:
         """Return grouped workout count by period."""
         if period == "month":

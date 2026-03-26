@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from datetime import date
 from uuid import uuid4
 
@@ -23,6 +25,10 @@ def _initialize_page_state() -> None:
     st.session_state.setdefault("logbook_edit_id", "")
     st.session_state.setdefault("logbook_dialog_nonce", "")
     st.session_state.setdefault("logbook_template_workout", None)
+    st.session_state.setdefault("logbook_autosave_workout_id", "")
+    st.session_state.setdefault("logbook_autosave_last_hash", "")
+    st.session_state.setdefault("logbook_autosave_last_ts", 0.0)
+    st.session_state.setdefault("logbook_autosave_status", "")
 
 
 def _exercise_summary(workout: Workout) -> str:
@@ -49,6 +55,7 @@ def _ensure_exercise_state(prefix: str, exercise_index: int) -> None:
     )
     st.session_state.setdefault(f"{exercise_base}_set_count", 1)
     st.session_state.setdefault(f"{exercise_base}_saved_name", "")
+    st.session_state.setdefault(f"{exercise_base}_definition_id", "")
 
 
 def _ensure_set_state(prefix: str, exercise_index: int, set_index: int) -> None:
@@ -57,6 +64,9 @@ def _ensure_set_state(prefix: str, exercise_index: int, set_index: int) -> None:
     st.session_state.setdefault(f"{set_base}_weight", "")
     st.session_state.setdefault(f"{set_base}_reps", "")
     st.session_state.setdefault(f"{set_base}_duration", "")
+    st.session_state.setdefault(f"{set_base}_placeholder_weight", "")
+    st.session_state.setdefault(f"{set_base}_placeholder_reps", "")
+    st.session_state.setdefault(f"{set_base}_placeholder_duration", "")
 
 
 def _set_exercise_defaults(prefix: str, exercise_index: int) -> None:
@@ -70,9 +80,13 @@ def _set_exercise_defaults(prefix: str, exercise_index: int) -> None:
     st.session_state[f"{exercise_base}_saved_type"] = ExerciseType.WEIGHT_REPS.value
     st.session_state[f"{exercise_base}_set_count"] = 1
     st.session_state[f"{exercise_base}_saved_name"] = ""
+    st.session_state[f"{exercise_base}_definition_id"] = ""
     st.session_state[f"{exercise_base}_set_0_weight"] = ""
     st.session_state[f"{exercise_base}_set_0_reps"] = ""
     st.session_state[f"{exercise_base}_set_0_duration"] = ""
+    st.session_state[f"{exercise_base}_set_0_placeholder_weight"] = ""
+    st.session_state[f"{exercise_base}_set_0_placeholder_reps"] = ""
+    st.session_state[f"{exercise_base}_set_0_placeholder_duration"] = ""
 
 
 def _clear_exercise_state(prefix: str, exercise_index: int) -> None:
@@ -89,6 +103,7 @@ def _clear_exercise_state(prefix: str, exercise_index: int) -> None:
         f"{exercise_base}_saved_category",
         f"{exercise_base}_saved_type",
         f"{exercise_base}_set_count",
+        f"{exercise_base}_definition_id",
     ]
 
     for set_index in range(set_count + 2):
@@ -98,6 +113,9 @@ def _clear_exercise_state(prefix: str, exercise_index: int) -> None:
                 f"{set_base}_weight",
                 f"{set_base}_reps",
                 f"{set_base}_duration",
+                f"{set_base}_placeholder_weight",
+                f"{set_base}_placeholder_reps",
+                f"{set_base}_placeholder_duration",
             ]
         )
 
@@ -136,6 +154,9 @@ def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> Non
         st.session_state[f"{exercise_base}_type"] = entry.exercise_type.value
         st.session_state[f"{exercise_base}_saved_category"] = entry.category.value
         st.session_state[f"{exercise_base}_saved_type"] = entry.exercise_type.value
+        st.session_state[f"{exercise_base}_definition_id"] = (
+            entry.exercise_definition_id
+        )
 
         set_count = max(1, len(entry.sets))
         st.session_state[f"{exercise_base}_set_count"] = set_count
@@ -160,15 +181,20 @@ def _initialize_workout_form_state(prefix: str, initial_workout: Workout) -> Non
                 if default_set and default_set.duration_seconds is not None
                 else ""
             )
+            st.session_state[f"{set_base}_placeholder_weight"] = ""
+            st.session_state[f"{set_base}_placeholder_reps"] = ""
+            st.session_state[f"{set_base}_placeholder_duration"] = ""
 
     st.session_state[initialized_nonce_key] = nonce
 
 
 def _add_exercise_from_definition(
     prefix: str,
+    exercise_definition_id: str,
     exercise_name: str,
     category: ExerciseCategory,
     exercise_type: ExerciseType,
+    placeholder_sets: list[WorkoutSet],
 ) -> None:
     """Add a new configured exercise section from one definition."""
     count_key = f"{prefix}_exercise_count"
@@ -184,6 +210,30 @@ def _add_exercise_from_definition(
     st.session_state[f"{exercise_base}_saved_category"] = category.value
     st.session_state[f"{exercise_base}_type"] = exercise_type.value
     st.session_state[f"{exercise_base}_saved_type"] = exercise_type.value
+    st.session_state[f"{exercise_base}_definition_id"] = exercise_definition_id
+
+    set_count = max(1, len(placeholder_sets))
+    st.session_state[f"{exercise_base}_set_count"] = set_count
+    for set_index in range(set_count):
+        _ensure_set_state(
+            prefix=prefix, exercise_index=exercise_index, set_index=set_index
+        )
+        set_base = f"{exercise_base}_set_{set_index}"
+        if set_index < len(placeholder_sets):
+            previous_set = placeholder_sets[set_index]
+            st.session_state[f"{set_base}_placeholder_weight"] = (
+                str(previous_set.weight_kg)
+                if previous_set.weight_kg is not None
+                else ""
+            )
+            st.session_state[f"{set_base}_placeholder_reps"] = (
+                str(previous_set.reps) if previous_set.reps is not None else ""
+            )
+            st.session_state[f"{set_base}_placeholder_duration"] = (
+                str(previous_set.duration_seconds)
+                if previous_set.duration_seconds is not None
+                else ""
+            )
 
 
 def _add_set(prefix: str, exercise_index: int) -> None:
@@ -227,6 +277,9 @@ def _remove_exercise(prefix: str, exercise_index: int) -> None:
         st.session_state[f"{target_base}_saved_type"] = st.session_state.get(
             f"{source_base}_saved_type", ExerciseType.WEIGHT_REPS.value
         )
+        st.session_state[f"{target_base}_definition_id"] = st.session_state.get(
+            f"{source_base}_definition_id", ""
+        )
         st.session_state[f"{target_base}_set_count"] = st.session_state.get(
             f"{source_base}_set_count", 1
         )
@@ -243,6 +296,15 @@ def _remove_exercise(prefix: str, exercise_index: int) -> None:
             )
             st.session_state[f"{target_set_base}_duration"] = st.session_state.get(
                 f"{source_set_base}_duration", ""
+            )
+            st.session_state[f"{target_set_base}_placeholder_weight"] = (
+                st.session_state.get(f"{source_set_base}_placeholder_weight", "")
+            )
+            st.session_state[f"{target_set_base}_placeholder_reps"] = (
+                st.session_state.get(f"{source_set_base}_placeholder_reps", "")
+            )
+            st.session_state[f"{target_set_base}_placeholder_duration"] = (
+                st.session_state.get(f"{source_set_base}_placeholder_duration", "")
             )
 
     trailing_index = exercise_count - 1
@@ -281,23 +343,11 @@ def _parse_int(raw_value: str) -> int:
 
 
 def _parse_duration_to_seconds(raw_value: str) -> int:
-    """Parse duration text (ss, mm:ss, hh:mm:ss) to total seconds."""
+    """Parse duration text in seconds to int."""
     value = raw_value.strip()
     if not value:
         return 0
-
-    try:
-        parts = [int(part) for part in value.split(":")]
-    except ValueError:
-        return 0
-
-    if len(parts) == 1:
-        return parts[0]
-    if len(parts) == 2:
-        return parts[0] * 60 + parts[1]
-    if len(parts) == 3:
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    return 0
+    return _parse_int(value)
 
 
 def _build_workout_from_form(
@@ -418,22 +468,157 @@ def _render_set_inputs(
 
         if exercise_type == ExerciseType.WEIGHT_REPS:
             row[1].text_input(
-                "kg", key=f"{set_base}_weight", label_visibility="collapsed"
+                "kg",
+                key=f"{set_base}_weight",
+                label_visibility="collapsed",
+                placeholder=str(
+                    st.session_state.get(f"{set_base}_placeholder_weight", "")
+                ),
             )
             row[2].text_input(
-                "reps", key=f"{set_base}_reps", label_visibility="collapsed"
+                "reps",
+                key=f"{set_base}_reps",
+                label_visibility="collapsed",
+                placeholder=str(
+                    st.session_state.get(f"{set_base}_placeholder_reps", "")
+                ),
             )
         elif exercise_type == ExerciseType.BODYWEIGHT_REPS:
             row[1].text_input(
-                "reps", key=f"{set_base}_reps", label_visibility="collapsed"
+                "reps",
+                key=f"{set_base}_reps",
+                label_visibility="collapsed",
+                placeholder=str(
+                    st.session_state.get(f"{set_base}_placeholder_reps", "")
+                ),
             )
         else:
             row[1].text_input(
                 "duration",
                 key=f"{set_base}_duration",
                 label_visibility="collapsed",
-                placeholder="mm:ss",
+                placeholder=str(
+                    st.session_state.get(f"{set_base}_placeholder_duration", "")
+                )
+                or "seconds",
             )
+
+
+def _collect_form_snapshot(form_prefix: str) -> str:
+    """Collect current form widget state into a deterministic string payload."""
+    exercise_count = int(st.session_state.get(f"{form_prefix}_exercise_count", 0))
+    snapshot: dict[str, object] = {
+        "name": str(st.session_state.get(f"{form_prefix}_name", "")),
+        "date": str(st.session_state.get(f"{form_prefix}_date", "")),
+        "notes": str(st.session_state.get(f"{form_prefix}_notes", "")),
+        "exercise_count": exercise_count,
+        "exercises": [],
+    }
+
+    exercises: list[dict[str, object]] = []
+    for exercise_index in range(exercise_count):
+        _ensure_exercise_state(prefix=form_prefix, exercise_index=exercise_index)
+        exercise_base = f"{form_prefix}_exercise_{exercise_index}"
+        set_count = int(st.session_state.get(f"{exercise_base}_set_count", 0))
+
+        sets: list[dict[str, str]] = []
+        for set_index in range(set_count):
+            _ensure_set_state(
+                prefix=form_prefix,
+                exercise_index=exercise_index,
+                set_index=set_index,
+            )
+            set_base = f"{exercise_base}_set_{set_index}"
+            sets.append(
+                {
+                    "weight": str(st.session_state.get(f"{set_base}_weight", "")),
+                    "reps": str(st.session_state.get(f"{set_base}_reps", "")),
+                    "duration": str(st.session_state.get(f"{set_base}_duration", "")),
+                }
+            )
+
+        exercises.append(
+            {
+                "configured": bool(
+                    st.session_state.get(f"{exercise_base}_configured", False)
+                ),
+                "name": str(st.session_state.get(f"{exercise_base}_saved_name", "")),
+                "category": str(
+                    st.session_state.get(f"{exercise_base}_saved_category", "")
+                ),
+                "type": str(st.session_state.get(f"{exercise_base}_saved_type", "")),
+                "set_count": set_count,
+                "sets": sets,
+            }
+        )
+
+    snapshot["exercises"] = exercises
+    return json.dumps(snapshot, sort_keys=True)
+
+
+def _is_empty_form(form_prefix: str) -> bool:
+    """Return whether form currently contains no meaningful workout content."""
+    if str(st.session_state.get(f"{form_prefix}_name", "")).strip():
+        return False
+    if str(st.session_state.get(f"{form_prefix}_notes", "")).strip():
+        return False
+
+    exercise_count = int(st.session_state.get(f"{form_prefix}_exercise_count", 0))
+    for exercise_index in range(exercise_count):
+        _ensure_exercise_state(prefix=form_prefix, exercise_index=exercise_index)
+        exercise_base = f"{form_prefix}_exercise_{exercise_index}"
+        if st.session_state.get(f"{exercise_base}_configured", False):
+            return False
+    return True
+
+
+def _autosave_workout_form(
+    service: WorkoutService,
+    form_prefix: str,
+    existing_workout: Workout | None,
+) -> None:
+    """Autosave the workout form when changed and valid."""
+    if _is_empty_form(form_prefix):
+        return
+
+    snapshot = _collect_form_snapshot(form_prefix)
+    last_hash = str(st.session_state.get("logbook_autosave_last_hash", ""))
+    if snapshot == last_hash:
+        return
+
+    now_monotonic = time.monotonic()
+    last_save_ts = float(st.session_state.get("logbook_autosave_last_ts", 0.0))
+    if now_monotonic - last_save_ts < 1.5:
+        return
+
+    autosave_workout_id = str(st.session_state.get("logbook_autosave_workout_id", ""))
+    build_context = existing_workout
+    if build_context is None and autosave_workout_id:
+        build_context = Workout(
+            id=autosave_workout_id,
+            name="",
+            workout_date=date.today(),
+            notes="",
+            exercises=[],
+        )
+
+    draft = _build_workout_from_form(
+        service=service,
+        form_prefix=form_prefix,
+        existing_workout=build_context,
+    )
+
+    try:
+        saved_id = service.save_workout(draft)
+    except ValidationError:
+        return
+
+    st.session_state["logbook_autosave_workout_id"] = saved_id
+    st.session_state["logbook_autosave_last_hash"] = snapshot
+    st.session_state["logbook_autosave_last_ts"] = now_monotonic
+    st.session_state["logbook_autosave_status"] = (
+        f"Autosaved at {time.strftime('%H:%M:%S')}"
+    )
 
 
 @st.dialog("Workout")
@@ -458,6 +643,10 @@ def _workout_dialog(
                 if st.button("Delete Workout", width="stretch"):
                     service.delete_workout(existing_workout.id)
                     st.session_state["logbook_template_workout"] = None
+                    st.session_state["logbook_autosave_workout_id"] = ""
+                    st.session_state["logbook_autosave_last_hash"] = ""
+                    st.session_state["logbook_autosave_last_ts"] = 0.0
+                    st.session_state["logbook_autosave_status"] = ""
                     st.rerun()
 
                 if st.button("Save as workout plan", width="stretch"):
@@ -479,6 +668,12 @@ def _workout_dialog(
         st.text_input("Workout Name", key=f"{form_prefix}_name")
         st.date_input("Date", key=f"{form_prefix}_date")
     st.text_area("Notes", key=f"{form_prefix}_notes", height=32)
+
+    _autosave_workout_form(
+        service=service,
+        form_prefix=form_prefix,
+        existing_workout=existing_workout,
+    )
 
     exercise_count = int(st.session_state[f"{form_prefix}_exercise_count"])
     for exercise_index in range(exercise_count):
@@ -545,32 +740,54 @@ def _workout_dialog(
             "No exercise definitions available. Add exercises in Exercise settings."
         )
     else:
-        with st.popover("Add Exercise"):
-            with st.container(height=260):
-                for definition in definitions:
-                    button_label = f"{definition.name} ({definition.category.value})"
-                    if st.button(
-                        button_label,
-                        key=f"{form_prefix}_add_definition_{definition.id}",
-                        width="stretch",
-                    ):
-                        _add_exercise_from_definition(
-                            prefix=form_prefix,
-                            exercise_name=definition.name,
-                            category=definition.category,
-                            exercise_type=definition.exercise_type,
-                        )
-                        _rerun_keep_dialog(
-                            mode=dialog_mode_for_rerun,
-                            workout_id=dialog_workout_id,
-                        )
+        with st.popover("Add Exercise", use_container_width=True):
+            for definition in definitions:
+                button_label = f"{definition.name} ({definition.category.value})"
+                if st.button(
+                    button_label,
+                    key=f"{form_prefix}_add_definition_{definition.id}",
+                    width="stretch",
+                ):
+                    previous_entry = service.get_last_logged_exercise_entry(
+                        definition.id
+                    )
+                    placeholder_sets = previous_entry.sets if previous_entry else []
+                    _add_exercise_from_definition(
+                        prefix=form_prefix,
+                        exercise_definition_id=definition.id,
+                        exercise_name=definition.name,
+                        category=definition.category,
+                        exercise_type=definition.exercise_type,
+                        placeholder_sets=placeholder_sets,
+                    )
+                    _rerun_keep_dialog(
+                        mode=dialog_mode_for_rerun,
+                        workout_id=dialog_workout_id,
+                    )
 
-    save_label = "Save Workout" if mode != "edit" else "Save Changes"
+    autosave_status = str(st.session_state.get("logbook_autosave_status", "")).strip()
+    if autosave_status:
+        st.caption(autosave_status)
+
+    save_label = "Save Workout" if mode != "edit" else "Finish Workout"
     if st.button(save_label, width="stretch"):
+        build_context = existing_workout
+        autosave_workout_id = str(
+            st.session_state.get("logbook_autosave_workout_id", "")
+        )
+        if build_context is None and autosave_workout_id:
+            build_context = Workout(
+                id=autosave_workout_id,
+                name="",
+                workout_date=date.today(),
+                notes="",
+                exercises=[],
+            )
+
         workout = _build_workout_from_form(
             service=service,
             form_prefix=form_prefix,
-            existing_workout=existing_workout,
+            existing_workout=build_context,
         )
         try:
             service.save_workout(workout)
@@ -579,6 +796,10 @@ def _workout_dialog(
             return
 
         st.session_state["logbook_template_workout"] = None
+        st.session_state["logbook_autosave_workout_id"] = ""
+        st.session_state["logbook_autosave_last_hash"] = ""
+        st.session_state["logbook_autosave_last_ts"] = 0.0
+        st.session_state["logbook_autosave_status"] = ""
         st.rerun()
 
 
@@ -591,6 +812,10 @@ def _open_dialog_if_requested(service: WorkoutService) -> None:
     st.session_state["logbook_dialog_mode"] = None
 
     if dialog_mode == "create":
+        st.session_state["logbook_autosave_workout_id"] = ""
+        st.session_state["logbook_autosave_last_hash"] = ""
+        st.session_state["logbook_autosave_last_ts"] = 0.0
+        st.session_state["logbook_autosave_status"] = ""
         draft = Workout(
             id="", name="", workout_date=date.today(), notes="", exercises=[]
         )
@@ -601,6 +826,10 @@ def _open_dialog_if_requested(service: WorkoutService) -> None:
 
     if dialog_mode == "edit":
         workout_id = st.session_state.get("logbook_edit_id", "")
+        st.session_state["logbook_autosave_workout_id"] = workout_id
+        st.session_state["logbook_autosave_last_hash"] = ""
+        st.session_state["logbook_autosave_last_ts"] = 0.0
+        st.session_state["logbook_autosave_status"] = ""
         workout = service.get_workout(workout_id) if workout_id else None
         if workout is not None:
             _workout_dialog(
@@ -612,6 +841,10 @@ def _open_dialog_if_requested(service: WorkoutService) -> None:
         return
 
     if dialog_mode == "create_from_plan":
+        st.session_state["logbook_autosave_workout_id"] = ""
+        st.session_state["logbook_autosave_last_hash"] = ""
+        st.session_state["logbook_autosave_last_ts"] = 0.0
+        st.session_state["logbook_autosave_status"] = ""
         workout_template = st.session_state.get("logbook_template_workout")
         if workout_template is not None:
             _workout_dialog(
@@ -640,7 +873,7 @@ def render(repository: FalseGripRepository) -> None:
             left.write(workout.workout_date.strftime("%Y-%m-%d"))
             right.subheader(workout.name)
             right.text(_exercise_summary(workout))
-            if right.button("Open", key=f"open_{workout.id}", width="stretch"):
+            if st.button("Open", key=f"open_{workout.id}", width="stretch"):
                 st.session_state["logbook_dialog_mode"] = "edit"
                 st.session_state["logbook_edit_id"] = workout.id
                 st.session_state["logbook_dialog_nonce"] = str(uuid4())

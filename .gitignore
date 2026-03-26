@@ -1,4 +1,5 @@
 .github
+.streamlit/.secrets.toml
 
 falsegrip.db
 

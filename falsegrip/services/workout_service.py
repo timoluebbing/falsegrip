@@ -69,6 +69,12 @@ class WorkoutService:
         """Delete one exercise definition by id."""
         self._repository.delete_exercise_definition(exercise_id)
 
+    def get_last_logged_exercise_entry(
+        self, exercise_definition_id: str
+    ) -> WorkoutExerciseEntry | None:
+        """Return the latest logged exercise entry for one exercise definition."""
+        return self._repository.get_last_logged_exercise_entry(exercise_definition_id)
+
     def ensure_exercise_definition(
         self,
         name: str,

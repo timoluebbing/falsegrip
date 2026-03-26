@@ -6,7 +6,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from falsegrip.models.workout import ExerciseDefinition, Workout, WorkoutPlan
+from falsegrip.models.workout import (
+    ExerciseDefinition,
+    Workout,
+    WorkoutExerciseEntry,
+    WorkoutPlan,
+)
 
 Period = Literal["week", "month"]
 
@@ -93,6 +98,12 @@ class FalseGripRepository(ABC):
     @abstractmethod
     def delete_exercise_definition(self, exercise_id: str) -> None:
         """Delete one exercise definition by id."""
+
+    @abstractmethod
+    def get_last_logged_exercise_entry(
+        self, exercise_definition_id: str
+    ) -> WorkoutExerciseEntry | None:
+        """Return the most recent logged exercise entry for one exercise definition."""
 
     @abstractmethod
     def get_workout_frequency(self, period: Period) -> list[WorkoutFrequencyPoint]:
