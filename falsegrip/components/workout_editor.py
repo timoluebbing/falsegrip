@@ -216,11 +216,22 @@ def render_workout_editor(
             "Workout Name" if mode != EditorMode.PLAN_EDIT else "Plan Name",
             draft,
             "name",
-            key="draft_name",
+            key=f"draft_name_{getattr(draft, 'key_id', '')}",
         )
         if mode != EditorMode.PLAN_EDIT:
-            bound_date_input("Date", draft, "workout_date", key="draft_date")
-    bound_text_area("Notes", draft, "notes", key="draft_notes", height=32)
+            bound_date_input(
+                "Date",
+                draft,
+                "workout_date",
+                key=f"draft_date_{getattr(draft, 'key_id', '')}",
+            )
+    bound_text_area(
+        "Notes",
+        draft,
+        "notes",
+        key=f"draft_notes_{getattr(draft, 'key_id', '')}",
+        height=32,
+    )
 
     indices_to_remove = []
 

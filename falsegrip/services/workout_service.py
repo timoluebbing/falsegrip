@@ -169,9 +169,9 @@ class WorkoutService:
                 WorkoutSet(
                     id="",
                     order_index=workout_set.order_index,
-                    weight_kg=workout_set.weight_kg,
-                    reps=workout_set.reps,
-                    duration_seconds=workout_set.duration_seconds,
+                    weight_kg=None,
+                    reps=None,
+                    duration_seconds=None,
                 )
                 for workout_set in entry.sets
             ]

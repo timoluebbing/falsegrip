@@ -46,6 +46,7 @@ class WorkoutDraft:
     notes: str = ""
     exercises: list[ExerciseDraft] = field(default_factory=list)
     autosaved_id: str = ""
+    key_id: str = field(default_factory=lambda: str(uuid4()))
 
     @property
     def data_hash(self) -> str:
