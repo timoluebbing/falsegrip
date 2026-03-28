@@ -44,8 +44,25 @@ def bound_text_area(label: str, obj: object, attr: str, key: str, **kwargs) -> s
     return val
 
 
-def _parse_float(raw_value: str) -> float:
-    value = raw_value.strip()
+def bound_number_input(
+    label: str, obj: object, attr: str, key: str, **kwargs
+) -> float | int:
+    if key not in st.session_state:
+        st.session_state[key] = getattr(obj, attr)
+    # Number input needs a real value, not string
+    val = st.number_input(label, key=key, **kwargs)
+    setattr(obj, attr, val)
+    return val
+
+
+def _parse_float(raw_value: str | float | None) -> float:
+    if isinstance(raw_value, float):
+        return raw_value
+    if isinstance(raw_value, int):
+        return float(raw_value)
+    if not raw_value:
+        return 0.0
+    value = str(raw_value).strip()
     if not value:
         return 0.0
     try:
@@ -54,8 +71,14 @@ def _parse_float(raw_value: str) -> float:
         return 0.0
 
 
-def _parse_int(raw_value: str) -> int:
-    value = raw_value.strip()
+def _parse_int(raw_value: str | int | None) -> int:
+    if isinstance(raw_value, int):
+        return raw_value
+    if isinstance(raw_value, float):
+        return int(raw_value)
+    if not raw_value:
+        return 0
+    value = str(raw_value).strip()
     if not value:
         return 0
     try:
@@ -97,15 +120,15 @@ def workout_to_draft(workout: Workout, service: WorkoutService) -> WorkoutDraft:
             default_set = entry.sets[set_idx] if set_idx < len(entry.sets) else None
 
             s_draft = SetDraft(
-                weight_kg=str(default_set.weight_kg)
+                weight_kg=default_set.weight_kg
                 if default_set and default_set.weight_kg is not None
-                else "",
-                reps=str(default_set.reps)
+                else None,
+                reps=default_set.reps
                 if default_set and default_set.reps is not None
-                else "",
-                duration_seconds=str(default_set.duration_seconds)
+                else None,
+                duration_seconds=default_set.duration_seconds
                 if default_set and default_set.duration_seconds is not None
-                else "",
+                else None,
             )
 
             has_explicit = bool(
@@ -119,17 +142,9 @@ def workout_to_draft(workout: Workout, service: WorkoutService) -> WorkoutDraft:
 
             if not has_explicit and set_idx < len(previous_sets):
                 prev = previous_sets[set_idx]
-                s_draft.placeholder_weight = (
-                    str(prev.weight_kg) if prev.weight_kg is not None else ""
-                )
-                s_draft.placeholder_reps = (
-                    str(prev.reps) if prev.reps is not None else ""
-                )
-                s_draft.placeholder_duration = (
-                    str(prev.duration_seconds)
-                    if prev.duration_seconds is not None
-                    else ""
-                )
+                s_draft.placeholder_weight = prev.weight_kg
+                s_draft.placeholder_reps = prev.reps
+                s_draft.placeholder_duration = prev.duration_seconds
 
             ex_draft.sets.append(s_draft)
 
@@ -254,39 +269,59 @@ def render_workout_editor(
                     st.markdown(f"**{s_idx + 1}**")
 
                     if ex.exercise_type == ExerciseType.WEIGHT_REPS:
-                        bound_text_input(
+                        bound_number_input(
                             "kg",
                             s,
                             "weight_kg",
                             key=f"w_{s.key_id}",
                             label_visibility="collapsed",
-                            placeholder=s.placeholder_weight,
+                            placeholder=str(s.placeholder_weight)
+                            if s.placeholder_weight is not None
+                            else None,
+                            value=s.weight_kg,
+                            step=1.0,
+                            min_value=0.0,
                         )
-                        bound_text_input(
+                        bound_number_input(
                             "reps",
                             s,
                             "reps",
                             key=f"r_{s.key_id}",
                             label_visibility="collapsed",
-                            placeholder=s.placeholder_reps,
+                            placeholder=str(s.placeholder_reps)
+                            if s.placeholder_reps is not None
+                            else None,
+                            value=s.reps,
+                            step=1,
+                            min_value=0,
                         )
                     elif ex.exercise_type == ExerciseType.BODYWEIGHT_REPS:
-                        bound_text_input(
+                        bound_number_input(
                             "reps",
                             s,
                             "reps",
                             key=f"r_{s.key_id}",
                             label_visibility="collapsed",
-                            placeholder=s.placeholder_reps,
+                            placeholder=str(s.placeholder_reps)
+                            if s.placeholder_reps is not None
+                            else None,
+                            value=s.reps,
+                            step=1,
+                            min_value=0,
                         )
                     else:
-                        bound_text_input(
+                        bound_number_input(
                             "duration",
                             s,
                             "duration_seconds",
                             key=f"d_{s.key_id}",
                             label_visibility="collapsed",
-                            placeholder=s.placeholder_duration or "seconds",
+                            placeholder=str(s.placeholder_duration)
+                            if s.placeholder_duration is not None
+                            else "seconds",
+                            value=s.duration_seconds,
+                            step=1,
+                            min_value=0,
                         )
 
             if st.button("Add Set", key=f"add_{ex.key_id}", width="stretch"):

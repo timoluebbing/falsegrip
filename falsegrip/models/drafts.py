@@ -14,12 +14,12 @@ from falsegrip.models.enums import ExerciseCategory, ExerciseType
 class SetDraft:
     """A draft for a single set."""
 
-    weight_kg: str = ""
-    reps: str = ""
-    duration_seconds: str = ""
-    placeholder_weight: str = ""
-    placeholder_reps: str = ""
-    placeholder_duration: str = ""
+    weight_kg: float | None = None
+    reps: int | None = None
+    duration_seconds: int | None = None
+    placeholder_weight: float | None = None
+    placeholder_reps: int | None = None
+    placeholder_duration: int | None = None
     key_id: str = field(default_factory=lambda: str(uuid4()))
 
 
@@ -64,9 +64,9 @@ class WorkoutDraft:
                     "definition_id": ex.definition_id,
                     "sets": [
                         {
-                            "weight": s.weight_kg.strip(),
-                            "reps": s.reps.strip(),
-                            "duration": s.duration_seconds.strip(),
+                            "weight": s.weight_kg,
+                            "reps": s.reps,
+                            "duration": s.duration_seconds,
                         }
                         for s in ex.sets
                     ],
